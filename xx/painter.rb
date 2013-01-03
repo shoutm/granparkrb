@@ -1,5 +1,4 @@
 require "rspec"
-require "active_support/all"
 
 class Painter
   attr_accessor :cellmap
@@ -10,38 +9,43 @@ class Painter
   end
 
   def get_max_brush_size
-    brush_size = 99999 # put a number as much as big
-    0.upto(@size - 1) do |x|
-      0.upto(@size - 1) do |y|
-        tmp = get_largest_area(x, y)
-        brush_size = tmp if tmp < brush_size
+    1.upto(@size) do |max_brush_size|
+      return max_brush_size - 1 unless brushable? max_brush_size
+    end
+    @size
+  end
+
+  private 
+
+  def brushable?(brush_size)
+    painted_map = Marshal.load(Marshal.dump(@cellmap))
+    0.upto(@size - 1) do |y|
+      0.upto(@size - 1) do |x|
+        paint(painted_map, x, y, brush_size) if paintable?(x, y, brush_size)
       end
     end
-
-    brush_size
+    ! painted_map.flatten.find do |elm| elm != 1 end 
   end
 
-  # get largest area investigating cellmap from (x, y) to (x + n, y + n)
-  # "n" is 0 or a natural number.
-  # If cellmap(x, y) is not 0, return 0
-  def get_largest_area(x, y)
-    return 0 if @cellmap[x][y] != 0
-    n = 0
-    max_n = get_max_n(x, y)
-    catch :exit do 
-      n.upto(max_n) do
-        0.upto(n) do |i| throw :exit if @cellmap[x + n][y + i] != 0 end
-        0.upto(n) do |j| throw :exit if @cellmap[x + j][y + n] != 0 end
-        n += 1
-      end 
+  def paintable?(x, y, brush_size) # brush_size is expected >= 1
+    return false if [x, y].max + brush_size > @size
+    y.upto(y + brush_size - 1) do |yy|
+      x.upto(x + brush_size - 1) do |xx|
+        return false if @cellmap[yy][xx] != 0
+      end
     end
-
-    return n 
+    true
   end
-  
-  # return maximum n value if it starts counting from (x, y) to (x + n, y + n)
-  def get_max_n(x, y)
-    @size - [x, y].max - 1
+
+  # Paint painted_map "brush_size square" from (x, y) 
+  # If there are no "brush_size square" space from (x, y), it is not painted.
+  def paint(painted_map, x, y, brush_size)
+    return if [x, y].max + brush_size > @size
+    y.upto(y + brush_size - 1) do |yy|
+      x.upto(x + brush_size - 1) do |xx|
+        painted_map [yy][xx] = 1
+      end
+    end
   end
 end
 
@@ -52,14 +56,14 @@ def main
   # This is a 2-dimension array to store input values
   cellmap = Array.new
   # put first row to cellmap 
-  cellmap << firstline.split(' ')
+  cellmap << firstline.split(' ').collect do |x| x.to_i end
 
   # read other input values from standard input 
   (size - 1).times do |count|
-    cellmap << STDIN.gets.chomp.split(' ')
+    cellmap << STDIN.gets.chomp.split(' ').collect do |x| x.to_i end
   end
 
-  p cellmap
+  puts "A suitable brush size is #{Painter.new(cellmap).get_max_brush_size}"
 end
 
 main
@@ -68,8 +72,8 @@ describe Painter do
   it "should initialize" do 
     cellmap = [[1,2,3],[4,5,6],[7,8,9]]
     cellmap2 = [[1,2,3],[4,5,6],[7,8,9]]
-    p = Painter.new(cellmap)
-    p.cellmap.should == cellmap2
+    painter = Painter.new(cellmap)
+    painter.cellmap.should == cellmap2
   end
 
   it "should get max brush size" do 
@@ -111,36 +115,63 @@ describe Painter do
     Painter.new(cellmap5).get_max_brush_size.should == 1
   end
 
-  it "should get largest area" do 
+  it "should brushable?" do 
     cellmap1 = [[0,0,0,0,0,0],
                 [0,0,0,0,0,0],
                 [0,0,1,1,0,0],
                 [0,0,1,1,0,0],
                 [0,0,0,0,0,0],
                 [0,0,0,0,0,0]]
-    p = Painter.new(cellmap1)
-    p.get_largest_area(0, 0).should == 2
-    p.get_largest_area(1, 0).should == 2
-    p.get_largest_area(1, 1).should == 1
-    p.get_largest_area(2, 2).should == 0
-    p.get_largest_area(3, 1).should == 1
-    p.get_largest_area(3, 0).should == 2
-    p.get_largest_area(1, 3).should == 1
-    p.get_largest_area(4, 4).should == 2
+    Painter.new(cellmap1).send("brushable?", 2).should be_true
+    Painter.new(cellmap1).send("brushable?", 3).should be_false
+
   end
 
- it "should get max n" do 
+  it "should paintable?" do 
     cellmap1 = [[0,0,0,0,0,0],
+                [0,0,0,0,0,0],
+                [0,1,0,0,0,0],
+                [0,0,0,0,0,0],
+                [0,0,0,0,0,0],
+                [0,0,0,0,0,0]]
+    Painter.new(cellmap1).send("paintable?", 0, 0, 2).should be_true
+    Painter.new(cellmap1).send("paintable?", 0, 0, 3).should be_false
+    Painter.new(cellmap1).send("paintable?", 1, 1, 1).should be_true
+    Painter.new(cellmap1).send("paintable?", 1, 1, 2).should be_false
+    Painter.new(cellmap1).send("paintable?", 0, 2, 2).should be_false
+    Painter.new(cellmap1).send("paintable?", 4, 4, 2).should be_true
+    Painter.new(cellmap1).send("paintable?", 4, 4, 3).should be_false
+    cellmap2 = [[0,0,0,0,0,0],
                 [0,0,0,0,0,0],
                 [0,0,1,1,0,0],
                 [0,0,1,1,0,0],
                 [0,0,0,0,0,0],
                 [0,0,0,0,0,0]]
-    p = Painter.new(cellmap1)
-    p.get_max_n(0,0).should == 5
-    p.get_max_n(1,1).should == 4
-    p.get_max_n(3,2).should == 2
-    p.get_max_n(2,3).should == 2
-    p.get_max_n(5,5).should == 0
- end
+    Painter.new(cellmap2).send("paintable?", 0, 0, 2).should be_true
+    Painter.new(cellmap2).send("paintable?", 0, 0, 3).should be_false
+  end
+
+  it "should paint" do 
+    cellmap = [[0,0,0,0,0,0],
+               [0,0,0,0,0,0],
+               [0,1,0,0,0,0],
+               [0,0,0,0,0,0],
+               [0,0,0,0,0,0],
+               [0,0,0,0,0,0]]
+    painted_map = [[0,0,0,0,0,0],
+                   [0,0,0,0,0,0],
+                   [0,0,0,0,0,0],
+                   [0,0,0,0,0,0],
+                   [0,0,0,0,0,0],
+                   [0,0,0,0,0,0]]
+    Painter.new(cellmap).send("paint", painted_map, 0, 0, 2)
+    0.upto(1) do |y|
+      0.upto(1) do |x|
+        painted_map[y][x].should == 1
+      end
+    end
+
+    Painter.new(cellmap).send("paint", painted_map, 5, 5, 2)
+    painted_map[5][5].should == 0
+  end
 end
